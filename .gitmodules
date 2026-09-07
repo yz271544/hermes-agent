@@ -1,0 +1,3 @@
+[submodule "optional-mcps/sparql-mcp"]
+	path = optional-mcps/sparql-mcp
+	url = git@github.com:rareba/sparql-mcp.git

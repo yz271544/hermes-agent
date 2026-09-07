@@ -9,11 +9,22 @@ FROM ghcr.io/astral-sh/uv:0.11.6-python3.13-trixie@sha256:b3c543b6c4f23a5f2df228
 FROM node:22-bookworm-slim@sha256:7af03b14a13c8cdd38e45058fd957bf00a72bbe17feac43b1c15a689c029c732 AS node_source
 FROM debian:13.4
 
+# Build-time proxy used for external downloads. These are ARGs rather than
+# ENVs so the host-specific proxy is not retained in the runtime container.
+ARG HTTP_PROXY=http://172.17.0.1:10808
+ARG HTTPS_PROXY=http://172.17.0.1:10808
+
 # Disable Python stdout buffering to ensure logs are printed immediately.
 # Do not write .pyc files at runtime: /opt/hermes is immutable in the
 # published container and writable state belongs under /opt/data.
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+
+# Use the same domestic PyPI mirror as the host's pip configuration. Keep it
+# overridable so builders outside China can select a closer index with
+# `--build-arg UV_DEFAULT_INDEX=...`.
+ARG UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple
+ENV UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}
 
 # Store Playwright browsers outside the volume mount so the build-time
 # install survives the /opt/data volume overlay at runtime.
@@ -26,6 +37,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright
 # replaces tini with s6-overlay's /init (PID 1 = s6-svscan), which reaps
 # zombies non-blockingly on SIGCHLD and additionally supervises the main
 # hermes process, the dashboard, and per-profile gateways.
+RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates curl iputils-ping python3 python-is-python3 ripgrep ffmpeg gcc g++ make cmake python3-dev python3-venv libffi-dev libolm-dev procps git openssh-client docker-cli xz-utils && \
@@ -40,11 +52,9 @@ RUN apt-get update && \
 # we map between them inline. The noarch + symlinks tarballs are
 # architecture-independent and reused as-is.
 #
-# We use `curl` instead of `ADD` for the per-arch tarball because `ADD`
-# evaluates its URL at parse time, before any ARG / TARGETARCH substitution
-# — splitting one URL per arch into two ADDs would download both on every
-# build and leave dead bytes in the cache. A single curl + arch-keyed URL
-# is simpler and cache-friendlier.
+# All release assets use `curl` rather than remote `ADD` so downloads inherit
+# the build-time HTTPS proxy. `ADD` URLs are fetched directly by BuildKit and
+# do not reliably use proxy arguments declared inside this stage.
 #
 # Supply-chain integrity: every tarball is checksum-verified against the
 # upstream-published SHA256. To bump S6_OVERLAY_VERSION, fetch the four
@@ -57,24 +67,34 @@ ARG S6_OVERLAY_NOARCH_SHA256=b720f9d9340efc8bb07528b9743813c836e4b02f8693d90241f
 ARG S6_OVERLAY_X86_64_SHA256=a93f02882c6ed46b21e7adb5c0add86154f01236c93cd82c7d682722e8840563
 ARG S6_OVERLAY_AARCH64_SHA256=0952056ff913482163cc30e35b2e944b507ba1025d78f5becbb89367bf344581
 ARG S6_OVERLAY_SYMLINKS_SHA256=a60dc5235de3ecbcf874b9c1f18d73263ab99b289b9329aa950e8729c4789f0e
-ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp/
-ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-symlinks-noarch.tar.xz /tmp/
 RUN set -eu; \
     case "${TARGETARCH:-amd64}" in \
         amd64) s6_arch="x86_64"; s6_arch_sha="${S6_OVERLAY_X86_64_SHA256}" ;; \
         arm64) s6_arch="aarch64"; s6_arch_sha="${S6_OVERLAY_AARCH64_SHA256}" ;; \
         *) echo "Unsupported TARGETARCH=${TARGETARCH} for s6-overlay" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL --retry 3 -o /tmp/s6-overlay-arch.tar.xz \
-        "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${s6_arch}.tar.xz"; \
+    s6_base_url="https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}"; \
+    for archive in \
+        s6-overlay-noarch.tar.xz \
+        "s6-overlay-${s6_arch}.tar.xz" \
+        s6-overlay-symlinks-noarch.tar.xz; do \
+        curl -fsSL \
+            --connect-timeout 20 \
+            --retry 10 \
+            --retry-all-errors \
+            --retry-delay 3 \
+            --retry-max-time 600 \
+            -o "/tmp/${archive}" \
+            "${s6_base_url}/${archive}"; \
+    done; \
     { \
         printf '%s  %s\n' "${S6_OVERLAY_NOARCH_SHA256}" /tmp/s6-overlay-noarch.tar.xz; \
-        printf '%s  %s\n' "${s6_arch_sha}" /tmp/s6-overlay-arch.tar.xz; \
+        printf '%s  %s\n' "${s6_arch_sha}" "/tmp/s6-overlay-${s6_arch}.tar.xz"; \
         printf '%s  %s\n' "${S6_OVERLAY_SYMLINKS_SHA256}" /tmp/s6-overlay-symlinks-noarch.tar.xz; \
     } > /tmp/s6-overlay.sha256; \
     sha256sum -c /tmp/s6-overlay.sha256; \
     tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz; \
-    tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz; \
+    tar -C / -Jxpf "/tmp/s6-overlay-${s6_arch}.tar.xz"; \
     tar -C / -Jxpf /tmp/s6-overlay-symlinks-noarch.tar.xz; \
     rm /tmp/s6-overlay-*.tar.xz /tmp/s6-overlay.sha256; \
     # #34192: backward-compat shim for orchestration templates that still\
@@ -207,6 +227,8 @@ COPY --link --chmod=a+rX,go-w . .
 # resolution or downloads.
 RUN uv pip install --no-cache-dir --no-deps -e "."
 
+COPY optional-mcps/sparql-mcp apps/sparql-mcp
+RUN cd apps/sparql-mcp && uv pip install -e ".[dev,rich]"
 # Wire the exec shim and install-method stamp.  Files under /opt/hermes are
 # already root-owned (COPY, uv sync, npm install all run as root) and
 # read-only for the hermes user (go-w from the --chmod above).
