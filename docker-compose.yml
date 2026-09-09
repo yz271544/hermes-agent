@@ -28,7 +28,10 @@
 #
 services:
   gateway:
-    build: .
+    build: 
+      context: .
+      args:
+        UV_DEFAULT_INDEX: https://pypi.org/simple
     image: hermes-agent
     container_name: hermes
     restart: unless-stopped

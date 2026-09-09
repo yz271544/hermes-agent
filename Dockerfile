@@ -136,7 +136,7 @@ RUN set -eu; \
         "${base}/s6-overlay-noarch.tar.xz"; \
     curl -fsSL --retry 3 -o /tmp/s6-overlay-symlinks-noarch.tar.xz \
         "${base}/s6-overlay-symlinks-noarch.tar.xz"; \
-    curl -fsSL --retry 3 -o /tmp/s6-overlay-arch.tar.xz \
+    curl -fsSL --retry 3 -o /tmp/s6-overlay-${s6_arch}.tar.xz \
         "${base}/s6-overlay-${s6_arch}.tar.xz"; \
     { \
         printf '%s  %s\n' "${S6_OVERLAY_NOARCH_SHA256}" /tmp/s6-overlay-noarch.tar.xz; \
