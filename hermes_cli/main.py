@@ -494,6 +494,17 @@ def _under_gateway_supervisor(argv: list) -> bool:
     ).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _desktop_ssh_backend(argv: list) -> bool:
+    """A Desktop-owned ``serve --ssh-session-token-file`` child has a fixed identity too.
+
+    The Desktop client names the remote profile explicitly (``--profile <name>``, or none for
+    the root home). Following the remote host's sticky ``active_profile`` instead silently
+    re-homes the backend into a profile the UI never asked for, so Settings read one
+    ``config.yaml`` and the user edits another (KC's "nothing sticks over SSH").
+    """
+    return "--ssh-session-token-file" in argv
+
+
 def _apply_profile_override() -> None:
     """Pre-parse --profile/-p and set HERMES_HOME before imports."""
     argv = sys.argv[1:]
@@ -508,7 +519,7 @@ def _apply_profile_override() -> None:
     if profile_name is None and hermes_home_env and Path(hermes_home_env).parent.name == "profiles":
         return
 
-    if profile_name is None and not _under_gateway_supervisor(argv):
+    if profile_name is None and not _under_gateway_supervisor(argv) and not _desktop_ssh_backend(argv):
         try:
             from hermes_constants import get_default_hermes_root
 
@@ -1432,6 +1443,15 @@ def _apply_in_dir(args) -> None:
     except OSError as e:
         print(f"Error: cannot enter --in directory {in_dir}: {e}")
         sys.exit(1)
+    # Every cwd consumer (resolve_agent_cwd -> Codex app-server thread cwd, the
+    # terminal tool, context-file discovery) prefers TERMINAL_CWD over the process
+    # cwd, so a value inherited from a parent surface, the shell or .env outlives
+    # this chdir and re-homes the session in the old directory (#106220). Refresh
+    # it. An unset variable stays unset: the backends then derive from the new
+    # process cwd (local exports it at cli import, docker mounts it, ssh and
+    # container backends keep their own remote/sandbox default).
+    if os.environ.get("TERMINAL_CWD", "").strip():
+        os.environ["TERMINAL_CWD"] = _target_dir
     args.no_restore_cwd = True
 
 
