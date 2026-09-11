@@ -273,7 +273,7 @@ def _mint_document_id(session_id: str) -> str:
 # initialize() kwargs copied verbatim (str, stripped) onto ``self._<name>``.
 _SESSION_KWARGS = (
     "platform", "user_id", "user_name", "chat_id", "chat_name", "chat_type",
-    "thread_id", "agent_identity", "agent_workspace",
+    "thread_id", "agent_identity", "agent_workspace", "gateway_session_key",
 )
 # Retain metadata keys, each stamped from the attribute of the same name when set.
 _METADATA_ATTRS = (
@@ -325,6 +325,7 @@ class HindsightMemoryProvider(MemoryProvider):
         self._atexit_registered = False
         self._retain_tags: List[str] = []
         self._tags: list[str] | None = None
+        self._tags_by_hermes_session_key = False
         self._retain_source = _DEFAULT_RETAIN_SOURCE
         self._retain_user_prefix, self._retain_assistant_prefix = "User", "Assistant"
         self._turn_counter = self._turn_index = 0
@@ -415,6 +416,7 @@ class HindsightMemoryProvider(MemoryProvider):
             {"key": "memory_mode", "description": "Memory integration mode", "default": "hybrid", "choices": ["hybrid", "context", "tools"]},
             {"key": "recall_prefetch_method", "description": "Auto-recall method", "default": "recall", "choices": ["recall", "reflect"]},
             {"key": "retain_tags", "description": "Default tags applied to retained memories (comma-separated)", "default": ""},
+            {"key": "tags_by_hermes_session_key", "description": "Tag writes with the stable gateway session key and strictly scope recall/reflect to it", "default": False},
             {"key": "observation_scopes", "description": "How observations are scoped during consolidation: 'combined' (default — one pass over all tags), 'per_tag' (one isolated observation per tag), 'all_combinations' (every tag subset — expensive), or a JSON list of tag-lists for explicit custom scopes. Empty uses Hindsight's 'combined' default.", "default": ""},
             {"key": "retain_source", "description": "Metadata source value attached to retained memories (identifies the client that stored them)", "default": _DEFAULT_RETAIN_SOURCE},
             {"key": "retain_user_prefix", "description": "Label used before user turns in retained transcripts", "default": "User"},
@@ -733,6 +735,7 @@ class HindsightMemoryProvider(MemoryProvider):
 
         self._retain_tags = _normalize_retain_tags(_cfg_or_env("retain_tags", "HINDSIGHT_RETAIN_TAGS"))
         self._tags = self._retain_tags or None
+        self._tags_by_hermes_session_key = bool(cfg.get("tags_by_hermes_session_key", False))
         self._observation_scopes = _normalize_observation_scopes(
             _cfg_or_env("observation_scopes", "HINDSIGHT_RETAIN_OBSERVATION_SCOPES"))
         self._retain_source = str(_cfg_or_env("retain_source", "HINDSIGHT_RETAIN_SOURCE", _DEFAULT_RETAIN_SOURCE)).strip()
@@ -843,18 +846,38 @@ class HindsightMemoryProvider(MemoryProvider):
 
     def _recall(self, query: str) -> list:
         kwargs: dict = {"bank_id": self._bank_id, "query": query, "budget": self._budget, "max_tokens": self._recall_max_tokens}
-        if self._recall_tags:
-            kwargs.update(tags=self._recall_tags, tags_match=self._recall_tags_match)
+        kwargs.update(self._recall_filter_kwargs())
         if self._recall_types:
             kwargs["types"] = self._recall_types
         resp = self._run_hindsight_operation(lambda client: client.arecall(**kwargs))
         return resp.results or []
 
     def _reflect(self, query: str) -> str | None:
+        kwargs = {"bank_id": self._bank_id, "query": query, "budget": self._budget}
+        kwargs.update(self._recall_filter_kwargs())
         resp = self._run_hindsight_operation(
-            lambda client: client.areflect(bank_id=self._bank_id, query=query, budget=self._budget)
+            lambda client: client.areflect(**kwargs)
         )
         return resp.text
+
+    def _recall_filter_kwargs(self) -> Dict[str, Any]:
+        """Configured recall filter plus an independent strict gateway scope.
+
+        ``tags`` and ``tag_groups`` are AND-ed by Hindsight. Keeping the gateway
+        key in its own strict group preserves configured ``recall_tags_match``
+        semantics while excluding other users and untagged memories.
+        """
+        kwargs: Dict[str, Any] = {}
+        if self._recall_tags:
+            kwargs.update(tags=self._recall_tags, tags_match=self._recall_tags_match)
+        if not (self._tags_by_hermes_session_key and self._gateway_session_key):
+            return kwargs
+        scope = [self._gateway_session_key]
+        if self._recall_tags:
+            kwargs["tag_groups"] = [{"tags": scope, "match": "all_strict"}]
+        else:
+            kwargs.update(tags=scope, tags_match="all_strict")
+        return kwargs
 
     def _do_recall(self, query: str) -> tuple[str, int]:
         """One recall/reflect for *query* (background prefetch and ``recall_sync`` paths)
@@ -963,7 +986,13 @@ class HindsightMemoryProvider(MemoryProvider):
             "metadata": metadata or self._build_metadata(message_count=1, turn_index=self._turn_index),
             "timestamp": (occurred_at or "").strip() or _event_timestamp(),
         }
-        merged_tags = _normalize_retain_tags(list(self._retain_tags) + _normalize_retain_tags(tags))
+        gateway_tags = (
+            [self._gateway_session_key]
+            if self._tags_by_hermes_session_key and self._gateway_session_key else []
+        )
+        merged_tags = _normalize_retain_tags(
+            list(self._retain_tags) + gateway_tags + _normalize_retain_tags(tags)
+        )
         item.update({k: v for k, v in (("context", context), ("update_mode", update_mode)) if v is not None})
         item.update({k: v for k, v in (("tags", merged_tags), ("observation_scopes", self._observation_scopes)) if v})
         return item

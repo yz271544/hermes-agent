@@ -5,6 +5,7 @@ prefetch (auto_recall, preamble, query truncation), sync_turn (auto_retain,
 turn counting, tags), and schema completeness.
 """
 
+import asyncio
 import json
 import os
 import re
@@ -265,6 +266,7 @@ class TestConfig:
         assert provider._recall_max_tokens == 4096
         assert provider._recall_max_input_chars == 800
         assert provider._tags is None
+        assert provider._tags_by_hermes_session_key is False
         assert provider._observation_scopes is None
         assert provider._recall_tags is None
         # Default recall narrowed to observation-only; world/experience are
@@ -444,6 +446,49 @@ class TestPostSetup:
 
 
 class TestToolHandlers:
+    def test_gateway_session_key_tags_automatic_and_tool_retains(self, provider_with_config, monkeypatch):
+        p = provider_with_config(tags_by_hermes_session_key=True)
+        p.initialize(
+            session_id="transcript-a",
+            platform="api_server",
+            gateway_session_key="user:user-a",
+        )
+        p._client = _make_mock_client()
+        monkeypatch.setattr(p, "_resolve_retain_target", lambda document_id: (document_id, None))
+        monkeypatch.setattr(p, "_enqueue_retain", lambda job: job())
+        monkeypatch.setattr(p, "_run_sync", lambda coro: asyncio.run(coro))
+
+        p.sync_turn("remember this", "noted")
+        automatic_item = p._client.aretain_batch.call_args.kwargs["items"][0]
+        assert automatic_item["tags"] == ["user:user-a", "session:transcript-a"]
+
+        p._client.aretain_batch.reset_mock()
+        p.handle_tool_call("hindsight_retain", {"content": "also remember this"})
+        tool_item = p._client.aretain_batch.call_args.kwargs["items"][0]
+        assert tool_item["tags"] == ["user:user-a"]
+
+    def test_gateway_session_key_is_an_independent_strict_read_scope(self, provider_with_config, monkeypatch):
+        p = provider_with_config(tags_by_hermes_session_key=True)
+        p.initialize(
+            session_id="transcript-a",
+            platform="api_server",
+            gateway_session_key="user:user-a",
+        )
+        p._client = _make_mock_client()
+        monkeypatch.setattr(p, "_run_sync", lambda coro: asyncio.run(coro))
+
+        p._recall("preferences")
+        p._reflect("summarize preferences")
+
+        expected_filter = {
+            "tags": ["user:user-a"],
+            "tags_match": "all_strict",
+        }
+        recall_kwargs = p._client.arecall.call_args.kwargs
+        reflect_kwargs = p._client.areflect.call_args.kwargs
+        assert {key: recall_kwargs[key] for key in expected_filter} == expected_filter
+        assert {key: reflect_kwargs[key] for key in expected_filter} == expected_filter
+
     def test_retain_success(self, provider):
         result = json.loads(provider.handle_tool_call(
             "hindsight_retain", {"content": "user likes dark mode"}
@@ -1321,7 +1366,7 @@ class TestConfigSchema:
             "mode", "api_url", "api_key", "llm_provider", "llm_api_key",
             "llm_model", "bank_id", "bank_id_template", "bank_mission", "bank_retain_mission",
             "recall_budget", "memory_mode", "recall_prefetch_method",
-            "retain_tags", "retain_source",
+            "retain_tags", "tags_by_hermes_session_key", "retain_source",
             "retain_user_prefix", "retain_assistant_prefix",
             "recall_tags", "recall_tags_match",
             "auto_recall", "auto_retain",

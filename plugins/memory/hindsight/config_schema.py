@@ -1,7 +1,7 @@
 """Hindsight's declared config surface — rendered by the generic desktop panel."""
 
 from plugins.memory.config_schema import (
-    KIND_SECRET, KIND_SELECT, KIND_TEXT, ProviderConfigSchema, ProviderField, ProviderFieldOption,
+    KIND_BOOL, KIND_SECRET, KIND_SELECT, KIND_TEXT, ProviderConfigSchema, ProviderField, ProviderFieldOption,
 )
 
 CONFIG_SCHEMA = ProviderConfigSchema(
@@ -30,6 +30,14 @@ CONFIG_SCHEMA = ProviderConfigSchema(
         ProviderField(
             key="recall_budget", label="Recall budget", kind=KIND_SELECT, default="mid", aliases=("budget",),
             options=tuple(ProviderFieldOption(b, b) for b in ("low", "mid", "high")),
+            inline=True,
+        ),
+        ProviderField(
+            key="tags_by_hermes_session_key", label="Scope by session key", kind=KIND_BOOL, default="false",
+            description=(
+                "Tag retained memories with the stable Hermes gateway session key and strictly limit recall "
+                "and reflection to that key."
+            ),
             inline=True,
         ),
     ),

@@ -1,6 +1,7 @@
 """Tests for Hindsight's declared config surface."""
 
 from plugins.memory.config_schema import (
+    KIND_BOOL,
     KIND_SECRET,
     KIND_SELECT,
     get_provider_config_schema,
@@ -18,6 +19,7 @@ def test_hindsight_is_declared():
         "api_url",
         "bank_id",
         "recall_budget",
+        "tags_by_hermes_session_key",
     }
 
 
@@ -49,3 +51,7 @@ def test_api_key_is_a_secret_bound_to_env():
     assert api_key.kind == KIND_SECRET
     assert api_key.is_secret is True
     assert api_key.env_key == "HINDSIGHT_API_KEY"
+
+    session_scope = next(field for field in provider.fields if field.key == "tags_by_hermes_session_key")
+    assert session_scope.kind == KIND_BOOL
+    assert session_scope.default == "false"

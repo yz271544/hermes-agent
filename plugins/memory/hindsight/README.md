@@ -75,6 +75,7 @@ Config file: `~/.hermes/hindsight/config.json`
 | `recall_prompt_preamble` | — | Custom preamble for recalled memories in context |
 | `recall_tags` | — | Tags to filter when searching memories |
 | `recall_tags_match` | `any` | Tag matching mode: `any` / `all` / `any_strict` / `all_strict` |
+| `tags_by_hermes_session_key` | `false` | When enabled and a gateway/API session key is present, strictly scope recall and reflect to that key. Configured `recall_tags` remain an additional filter. |
 | `recall_types` | `observation` | Fact types surfaced by recall (both auto-recall and the `hindsight_recall` tool). Comma-separated string or JSON list. **Default narrowed to `observation` only** (see "Behavior change" below). Set to `observation,world,experience` to also include raw facts. |
 | `auto_recall` | `true` | Automatically recall memories before each turn |
 | `recall_sync` | `false` | Recall synchronously against the *current* message each turn (higher relevance, adds recall latency). Default off: recall runs in the background and is injected on the next turn. |
@@ -97,6 +98,7 @@ Config file: `~/.hermes/hindsight/config.json`
 | `retain_every_n_turns` | `1` | Retain every N turns (1 = every turn) |
 | `retain_context` | `conversation between Hermes Agent and the User` | Context label for retained memories |
 | `retain_tags` | — | Default tags applied to retained memories; merged with per-call tool tags |
+| `tags_by_hermes_session_key` | `false` | When enabled and a gateway/API session key is present, add its exact value as a tag to automatic and tool-driven retains. For the API server this is the `X-Hermes-Session-Key` value. |
 | `retain_source` | — | Opt-in `metadata.source` attached to retained memories (identifies the storing client, e.g. `hermes`). Empty by default — no attribution tag ships unless you set it. |
 | `retain_indicator` | `true` | Show a `👁️ Hindsight — saving to memory…` status line when a turn is saved. Turn off for customer-facing agents. |
 | `retain_user_prefix` | `User` | Label used before user turns in auto-retained transcripts |
@@ -107,6 +109,19 @@ Config file: `~/.hermes/hindsight/config.json`
 | Key | Default | Description |
 |-----|---------|-------------|
 | `memory_mode` | `hybrid` | How memories are integrated into the agent |
+
+For a shared bank serving multiple API users, enable session-key scoping in
+`~/.hermes/hindsight/config.json` and send a stable key across transcript sessions:
+
+```json
+{
+  "tags_by_hermes_session_key": true
+}
+```
+
+For example, `X-Hermes-Session-Key: user:user-a` adds `user:user-a` to retained
+memory tags and applies a strict matching filter to recall and reflect. Existing
+untagged memories are intentionally excluded while this scope is active.
 
 **memory_mode:**
 - `hybrid` — automatic context injection + tools available to the LLM
