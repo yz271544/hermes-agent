@@ -1,3 +1,4 @@
 [submodule "optional-mcps/sparql-mcp"]
 	path = optional-mcps/sparql-mcp
-	url = git@github.com:rareba/sparql-mcp.git
+	url = git@github.com:yz271544/sparql-mcp-py.git
+	branch = fix/MCP2-use-MCPServer
