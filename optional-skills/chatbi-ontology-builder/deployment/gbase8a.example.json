@@ -1,0 +1,19 @@
+{
+  "source_id": "gbase8a-main",
+  "engine": "gbase8a",
+  "host": "REPLACE_WITH_GBASE_CLUSTER_ENDPOINT",
+  "port": 5258,
+  "database": "REPLACE_WITH_DATABASE",
+  "user": "ontology_reader",
+  "password_env": "CHATBI_GBASE8A_PASSWORD",
+  "timeout_seconds": 15,
+  "tables": ["REPLACE_WITH_TABLE"],
+  "sampling": {
+    "enabled": false,
+    "server_budget_enforced": false,
+    "max_rows": 20,
+    "columns": {"REPLACE_WITH_TABLE": ["stat_date", "metric_value"]},
+    "filters": {"REPLACE_WITH_TABLE": [{"column": "stat_date", "op": ">=", "value": "2026-10-01"}]},
+    "expose_values": {}
+  }
+}

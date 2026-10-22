@@ -1,0 +1,19 @@
+{
+  "source_id": "doris-main",
+  "engine": "doris",
+  "host": "REPLACE_WITH_DORIS_FE",
+  "port": 9030,
+  "catalog": "internal",
+  "database": "zb_data",
+  "user": "ontology_reader",
+  "password_env": "CHATBI_DORIS_PASSWORD",
+  "timeout_seconds": 15,
+  "tables": ["REPLACE_WITH_TABLE"],
+  "sampling": {
+    "enabled": false,
+    "max_rows": 20,
+    "columns": {"REPLACE_WITH_TABLE": ["stat_date", "metric_value"]},
+    "filters": {"REPLACE_WITH_TABLE": [{"column": "stat_date", "op": ">=", "value": "2026-10-01"}]},
+    "expose_values": {}
+  }
+}

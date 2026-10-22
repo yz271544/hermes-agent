@@ -308,6 +308,18 @@ RUN uv pip install --no-cache-dir --no-deps -e "."
 
 COPY optional-mcps/sparql-mcp apps/sparql-mcp
 RUN cd apps/sparql-mcp && uv pip install -e ".[dev,rich]"
+
+# ---------- chatbi-ontology-builder skill runtime deps ----------
+# Mirrors optional-skills/chatbi-ontology-builder/deployment/Dockerfile.chatbi
+# so the published image carries them without the two-step derived build.
+# Deliberately a SEPARATE venv: rdflib/pyshacl/PyMuPDF/psycopg are skill-only
+# and must not land in Hermes' uv.lock-pinned /opt/hermes/.venv. The skill's
+# scripts are documented to run under this absolute interpreter.
+RUN uv venv --python /opt/hermes/.venv/bin/python /opt/chatbi-ontology && \
+    uv pip install --no-cache-dir --python /opt/chatbi-ontology/bin/python \
+        -r /opt/hermes/optional-skills/chatbi-ontology-builder/deployment/requirements.txt && \
+    /opt/chatbi-ontology/bin/python -c "import rdflib, pyshacl, pymysql, psycopg, sqlglot, docx, openpyxl, pptx, fitz" && \
+    chmod -R a+rX /opt/chatbi-ontology
 # Wire the exec shim and install-method stamp.  Files under /opt/hermes are
 # already root-owned (COPY, uv sync, npm install all run as root) and
 # read-only for the hermes user (go-w from the --chmod above).
