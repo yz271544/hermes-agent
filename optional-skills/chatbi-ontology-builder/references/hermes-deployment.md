@@ -21,6 +21,8 @@ Compose 的 gateway/dashboard 共享 `/opt/data` 卷；配置示例支持 `termi
 | PostgreSQL 18 + pg-ripple | psycopg[binary] | PG 网络/CA、扩展安装与租户权限在 PG 侧完成 |
 | RDF/Turtle/SHACL | rdflib、pyshacl | 本体与证据文件可读、工作区可写 |
 | Git SQL 静态解析 | sqlglot | git 可执行程序、本地只读 checkout |
+| 大型 ETL 索引/平台字段绑定 | sqlglot、可选 PyMySQL；SQLite 为标准库 | 内置 scripts/etl.py；固定 commit 或明确工作区快照 |
+| 提示词采集/多源评审准备 | Python 标准库 | extract_prompt.py、prepare_review.py，不调用外部模型 API |
 | DOCX/XLSX/PPTX | python-docx、openpyxl、python-pptx | 不执行宏、不依赖 Office 运行时 |
 | PDF 文本 | PyMuPDF | 扫描件另需已有 OCR/视觉服务 |
 | 旧 DOC/XLS/WPS 转换（可选） | 不额外依赖 Python 库 | LibreOffice；中文字体按实际渲染需求安装 |
@@ -141,6 +143,19 @@ expose_values 默认空，只输出无原始值的样本统计。无需为本 sk
 再通过 assemble_bundle、validate_rdf 和业务 CQ 验证生成本体。组装器不会替模型做行业语义判断。
 pg_ripple.py 的发现/空图加载方法见 [validation-and-publish.md](validation-and-publish.md)。
 已有生产图升级需经目标构建验证的备份/晋升/恢复接口；脚本不覆盖已有图。
+
+### v2.1 大型 ETL 与用户定义
+
+整体同步 skill 目录，包括 scripts/etl_evidence 子包；不要只更新 SKILL.md 或把原血缘项目挂入容器。
+ETL/Git、单平台中央元数据库配置与多源归纳命令见 [etl-evidence.md](etl-evidence.md)。
+旧 extract_repository.py 保留用于通用源码/映射配置；大型 SQL 库使用内置 etl.py。
+如果部署在不同 terminal 后端，Git 仓库、证据索引、配置和环境变量都须在那里可见。
+中央元数据库可使用 deployment/metadata-catalog.example.json 和 CHATBI_METADATA_MYSQL_PASSWORD；
+这个连接是读取中央元数据表，不是绕过 Doris/GBase 的直接引擎验收。
+
+用户提示词可保存为工作区输入文本并采集为证据；与文档/数据库/ETL 一起送入 prepare_review，
+随后由 Hermes 完成语义对账与 decisions，再用原有组装/校验流程交付本体。
+本地测试与离线样例不代表 Hermes 容器、模型端或 pg-ripple 已部署/联调。
 
 可直接给 Hermes 的任务：
 

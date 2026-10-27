@@ -1,0 +1,8 @@
+{
+  "host": "REPLACE_WITH_METADATA_MYSQL_HOST",
+  "port": 3306,
+  "database": "meta_management",
+  "user": "REPLACE_WITH_READONLY_METADATA_USER",
+  "password_env": "CHATBI_METADATA_MYSQL_PASSWORD",
+  "read_timeout": 120
+}

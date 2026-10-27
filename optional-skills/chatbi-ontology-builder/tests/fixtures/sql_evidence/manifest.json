@@ -1,0 +1,18 @@
+[
+  {
+    "fixture": "real_ctas.sql",
+    "source_path": "sx_gbase100/MID/TB_MID_PAR_HOME_RH_DETAL_MON/step_1.sql",
+    "source_sha256": "a378d95185ee416695b5744efb04236c3042fef727501b08e82d269730d42ec4",
+    "line_start": 21,
+    "line_end": 67,
+    "fixture_sha256": "57f2b3dcea3ec6d5c0f7317a835796f94b43580a5855a9ef36d054292a4ed737"
+  },
+  {
+    "fixture": "real_union.sql",
+    "source_path": "sx_gbase100/RPT/TAP_C_3AS_DATA_RHDXHY_DAY/G2P_TB.sql",
+    "source_sha256": "c01ab7b37b06a01b552a2ddc6f2a7e63590378fc16d6b89e7075d401582810f1",
+    "line_start": 36,
+    "line_end": 1887,
+    "fixture_sha256": "8e746b05941a510413be3e38ce599caffbff85ed12ae61b52f0ad578f282241d"
+  }
+]

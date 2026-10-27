@@ -1,8 +1,8 @@
 ---
 name: chatbi-ontology-builder
-description: 从数据库、文档和 Git 构建并校验 ChatBI RDF/OWL 本体.
+description: 从数据库连接、上传文档、用户业务定义与大型 ETL/Git 代码库归纳并校验 ChatBI RDF/OWL 本体.
 metadata:
-  version: 2.0.0
+  version: 2.1.0
   author: Hermes Agent
   hermes:
     tags: [chatbi, ontology, doris, gbase8a, pg-ripple]
@@ -19,6 +19,7 @@ metadata:
 ## When to Use
 
 从 Doris / GBase 8a 的元数据与有界采样、业务文档或 Git 源码中抽取并合成五类本体；
+支持用户提示词中的明确业务定义，以及大型 ETL 库的增量 SQL 证据与分平台元数据绑定；
 增量维护、体检及向 PostgreSQL 18 + pg-ripple 发布。五类语义与七文件契约保持不变。
 不把 TuGraph JSON 当最终产物，不执行仓库业务代码，不把事实数据整库搬入本体。
 
@@ -38,6 +39,11 @@ Hermes 的 `terminal`、`read_file`、`patch`、`search_files`，或具备等价
 | Doris/GBase 8a | `scripts/extract_database.py --config <source.json> --output <new.json>` | 统一元数据/采样证据 |
 | 显式文档列表 | `scripts/extract_documents.py <files...> --output <new-dir>` | 带位置的文档块 |
 | 本地 Git checkout | `scripts/extract_repository.py <repo> --source-id <id> --revision <commit> --include '<glob>' --output <new.json>` | commit 固定的代码/SQL 证据 |
+| 大型 ETL/Git SQL 库 | `scripts/etl.py scan <repo> --revision <commit> --source-id <id> --index <sqlite> --engine <engine>` | 增量 SQL/转换/关联/过滤证据索引 |
+| 中央 MySQL 元数据库 | `scripts/etl.py metadata-snapshot --config <json> --index <sqlite> --source-id <id> --platform <name> --output <new.json>` | 单平台表列快照；再用 scan --metadata 绑定 |
+| 目标表 ETL 证据 | `scripts/etl.py export --index <sqlite> --source-id <id> --table <db.table> --output <new.json>` | 有界统一 evidence；--table 可重复 |
+| 提示词/业务定义 | `scripts/extract_prompt.py <saved-text> --source-id <id> --output <new.json>` | 带位置、角色、来源的用户陈述 |
+| 多源对账准备 | `scripts/prepare_review.py --evidence <json> --evidence <json> --output <new-review-dir>` | 候选口径/来源清单/逐块台账/问题清单 |
 | 已对账的语义决策 | `scripts/assemble_bundle.py --decisions <decisions.json> --evidence <file> --output <new-bundle>` | 七 TTL + manifest + 报告 |
 | 完整离线校验 | `scripts/validate_rdf.py <bundle> --shacl --output <bundle>/reports/validation.json` | RDF/计数/引用/SHACL 报告 |
 | 目标库发现 | `scripts/pg_ripple.py discover --output <capabilities.json>` | PG/扩展版本与函数签名 |
@@ -45,6 +51,15 @@ Hermes 的 `terminal`、`read_file`、`patch`、`search_files`，或具备等价
 所有脚本通过 `python3` 或部署文档指定的绝对解释器执行；相对路径以 skill 目录为基准。
 采集脚本返回 2 表示覆盖不完整或需要评审，不能描述为全部抽取成功。返回 0 只说明该步骤完成，
 不证明语义已审核。语义决策格式、断言级状态、增量合并与来源定位契约见上述抽取文档。
+
+大型 ETL 使用 [references/etl-evidence.md](references/etl-evidence.md)：先机械索引，再按目标表
+有界检索，不把整个仓库或数百万行引用记录塞进上下文。独立 ETL 包随 skill 交付，不依赖外部
+血缘项目、当前工作目录或固定服务器；源数据库、文档、用户定义与代码均可单独或组合起步。
+提示词中的任务要求与事实陈述分开；要求“建立活跃用户指标”不证明其公式、单位或数据来源。
+
+**用户请求整理本体时，证据 JSON 是中间产物。** 继续阅读并对账所有选定来源，归纳实体、
+指标、维度、场景及同义词，写 decisions 和未决项，再组装七文件 bundle 并校验。
+不让脚本替代语义判断；缺证据项保持 candidate/unresolved，不为填满层级编造事实。
 
 本体以 RDF/Turtle（`.ttl`）为事实源与交付物。本 SKILL 的两个核心承诺：
 1. **建模正确**：分层不跨层污染，概念可回溯到物理字段，指标口径完整。
