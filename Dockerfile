@@ -318,7 +318,7 @@ RUN cd apps/sparql-mcp && uv pip install -e ".[dev,rich]"
 RUN uv venv --python /opt/hermes/.venv/bin/python /opt/chatbi-ontology && \
     uv pip install --no-cache-dir --python /opt/chatbi-ontology/bin/python \
         -r /opt/hermes/optional-skills/chatbi-ontology-builder/deployment/requirements.txt && \
-    /opt/chatbi-ontology/bin/python -c "import rdflib, pyshacl, pymysql, psycopg, sqlglot, docx, openpyxl, pptx, fitz" && \
+    /opt/chatbi-ontology/bin/python -c "import rdflib, pyshacl, pymysql, psycopg, sqlglot, docx, openpyxl, pptx, fitz, xlrd" && \
     chmod -R a+rX /opt/chatbi-ontology
 # Wire the exec shim and install-method stamp.  Files under /opt/hermes are
 # already root-owned (COPY, uv sync, npm install all run as root) and
